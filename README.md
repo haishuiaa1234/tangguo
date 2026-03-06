@@ -5,7 +5,16 @@
 - 可下载成品文案（`deliverables/`）
 - PDF 汇总（`parent_todo_summary_2026-03-06.pdf`）
 
-## GitHub Pages 部署
+## 在线访问
+
+- GitHub Pages：`https://haishuiaa1234.github.io/tangguo/`
+- 微信备用（国内 CDN 镜像）：`https://cdn.jsdelivr.net/gh/haishuiaa1234/tangguo@main/index.html`
+
+说明：
+- 如果微信内置浏览器打不开 GitHub Pages，优先使用 jsDelivr 备用链接。
+- 备用链接通常 1~10 分钟内同步最新版本。
+
+## GitHub Pages 自动部署
 
 仓库推送到 `main` 分支后，GitHub Actions 会自动部署。
 
