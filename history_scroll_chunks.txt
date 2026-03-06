@@ -1,0 +1,272 @@
+===== base =====
+语文-王老师 2025/08/23 12:27
+各位家长：
+请各位家长注意，目前学校除了班主任建的QQ群外，没有建任何微信、QQ群，请大家注意辨别信息，加强网络安全防范。
+语文-王老师 2025/08/22 15:25
+各位家长朋友，大家好！
+1.入群后请修改自己的昵称，命名形式：学生姓名+爸爸/妈妈/其他+手机号。
+2.班群是为了让家校，师生更好地沟通，合作，禁止私自发言，有什么问题可以私聊，面谈，谢谢各位家长的配合。
+3.建议您将本群置顶，以免错过重要通知🤝
+===== down_1 =====
+
+
+监控群公告并整理小学生任务计划」} G error Unescaped
+小学生作业
+
+
+
+
+打开
+
+
+
+
+需求：帮监控QQ群，群名叫琅小柳洲东路一2班。监控群内语文-王老师发布的消息，识别最近3天的消息内哪些是需要小学生完成的作用，归纳并整理成完成计划和完成建议，如果有部分页可以帮忙完成
+
+我理解你的目标是：持续关注QQ群“琅小柳洲东路一2班”里“语文-王老师”近3天的消息，自动识别作业并整理成完成计划/建议。先检查当前工作区有没有现成的聊天记录或脚本基础，再给你一个可直接运行的方案。
+
+已运行 Get-ChildItem -Force | Format-List -Property Name,FullName,Mode,Length
+
+
+我刚检查到目录看起来是空的，我继续确认当前路径并做一次递归扫描，确定没有现成文件后我会直接搭一个可用的监控脚本。
+
+已运行 Get-Location | Select-Object -ExpandProperty Path
+
+
+已运行 Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Select-Object FullName,Length,Mode | Format-Table -AutoSize
+
+
+需求：帮监控QQ群，群名叫琅小柳洲东路一2班。监控群内语文-王老师发布的消息，识别最近3天的消息内哪些是需要小学生完成的作用，归纳并整理成完成计划和完成建议，如果有部分页可以帮忙完成。  
+其中qq是腾讯的一个软件，我已经安装在本地
+
+
+
+
+已处理 4m 36s
+已给你在本地做好可运行的QQ群作业监控脚本，针对你说的群和老师场景。
+
+核心文件：
+
+qq_homework_monitor.py
+start_monitor.ps1
+README.md
+requirements.txt
+实现内容：
+
+监控群名关键字“琅小柳洲东路一2班”
+过滤“语文-王老师”近3天消息
+识别需要学生完成的作业
+自动生成完成计划、完成建议、可协助完成项到 homework_report.md
+直接运行：
+
+安装依赖
+cd D:\work\文档\小学生作业
+python -m pip install -r requirements.txt
+打开QQ并进入该群聊天窗口（窗口标题要能看到群名）
+启动监控
+powershell -ExecutionPolicy Bypass -File D:\work\文档\小学生作业\start_monitor.ps1
+备用模式（如果窗口抓取不稳定）：
+
+python D:\work\文档\小学生作业\qq_homework_monitor.py --chat-file "你的QQ群导出聊天.txt" --teacher-name "语文-王老师"
+已完成本地语法检查（python -m py_compile）通过。
+你把新生成的homework_report.md内容贴给我后，我可以继续把“可协助完成部分”直接细化成可用草稿。
+
+
+4 个文件已更改
++736
+-0
+撤销
+README.md
+qq_homework_monitor.py
+requirements.txt
+start_monitor.ps1
+帮直接执行，并输出一份归完成计划和完成建议，如果有部分直接帮完成
+
+
+已处理 9m 13s
+已直接执行并产出结果。
+
+已执行监控（真实QQ模式）
+命令：python qq_homework_monitor.py --group-name "琅小柳洲东路一2班" --teacher-name "语文-王老师" --once
+时间窗口：2026-03-03 到 2026-03-06
+当前识别：0条可解析作业（已生成报告）
+报告文件：
+
+homework_report.md
+已输出“完成计划 + 完成建议 + 可直接用草稿”
+文件：完成计划与完成建议_2026-03-06.md
+我已直接帮你完成了可复用内容：
+阅读题答题模板
+看图写话开头/结尾模板
+生字词家庭听写卡模板
+当前阻塞点
+QQ窗口自动抓取在你这台机器上能启动，但无法稳定定位到目标群聊天记录区，因此这次没拿到“语文-王老师”近3天原文作业。
+要拿到精准版（含具体页码/提交要求），只需你做1步
+把QQ群 琅小柳洲东路一2班 聊天页面切到前台并停留在最近3天消息处，我立即再执行一次并给你精确作业计划。
+
+2 个文件已更改
++186
+-21
+撤销
+qq_homework_monitor.py
+完成计划与完成建议_2026-03-06.md
+我已经打开QQ并且，打开相应的群了，帮忙重新执行一下
+
+
+已处理 3m 26s
+已重新执行，结果已更新。
+
+执行时间：2026-03-06 13:53
+命令：python qq_homework_monitor.py --group-name "琅小柳洲东路一2班" --teacher-name "语文-王老师" --once
+识别结果：近3天（2026-03-03 到 2026-03-06）语文作业 0 条
+结果文件：
+
+homework_report.md
+raw_capture.txt
+完成计划与完成建议_2026-03-06.md
+补充说明：本次抓到的老师消息时间是 2025-08-22、2025-08-23（入群通知类），不在最近3天内，所以没有生成具体作业项。
+你把最近3天“语文-王老师”的原文消息贴我，我可以立刻给你出精准版完成计划，并直接帮你先写可代劳部分（阅读题模板/写话提纲）。
+
+
+2 个文件已更改
++13
+-3
+撤销
+qq_homework_monitor.py
+完成计划与完成建议_2026-03-06.md
+用户附件
+鼠标滚动获取红框内老师发布的信息
+
+我会直接按你说的“滚轮抓取红框聊天区”执行：先在QQ聊天区定位一个可复制点，然后循环“复制 -> 向上滚动 -> 再复制”，只提取“语文-王老师”的消息并输出结果。先快速改一下脚本让这个流程可复用。
+
+已运行 Get-Content -Path qq_homework_monitor.py -Encoding utf8
+
+
+我现在把脚本加上“滚轮抓取模式”，让它固定在红框聊天区点位执行：复制当前可见聊天 -> 向上滚动 -> 再复制，这样能拿到更多老师消息。改完我马上直接跑。
+
+已编辑
+qq_homework_monitor.py
++150
+-21
+脚本已加好滚轮抓取模式。下一步我会先做语法检查，然后立刻用滚轮模式执行一次，读取你红框里的老师消息并更新报告。
+
+已运行 python -m py_compile qq_homework_monitor.py
+
+
+已运行 python qq_homework_monitor.py --group-name "琅小柳洲东路一2班" --teacher-name "语文-王老师" --use-scroll-capture --scroll-rounds 24 --scroll-amount 950 --once（49s）
+
+
+1 个文件已更改
+撤销
+qq_homework_monitor.py
+用户附件
+点击图片红框的聊天记录按钮，获取语文-王老师的最近3天的言论，然后按照规则汇总
+
+我按你这次要求直接走“点红框聊天记录按钮”的流程：先精确点击QQ右下角的聊天记录按钮，再从聊天记录面板里抓取“语文-王老师”近3天消息并汇总。先执行点击和抓取。
+
+已运行 @' import time import pyautogui, pyperclip, pygetwindow as gw from pathlib import Path # locate QQ window wins = gw.getWindowsWithTitle('QQ') if not wins: raise SystemExit('NO_QQ_WINDOW') win = wins[0] try: if win.isMinimized: win.restore(); time.sleep(0.2) win.activate(); time.sleep(0.5) except Exception: pass print('QQ rect:', win.left, win.top, win.width, win.height) # click history button near lower-right (as in user's red box) hx = win.left + int(win.width * 0.935) hy = win.top + int(win.height * 0.865) pyautogui.click(hx, hy) time.sleep(1.2) print('Clicked history button at', hx, hy) # Try copy current focused content from history area pyautogui.hotkey('ctrl','a'); time.sleep(0.25) pyautogui.hotkey('ctrl','c'); time.sleep(0.5) text = pyperclip.paste() or '' Path('history_capture_raw.txt').write_text(text, encoding='utf-8') print('captured len', len(text)) print('head', text[:200].encode('unicode_escape').decode('ascii')) # list current windows for debugging for t in gw.getAllTitles(): if t and ('QQ' in t or '聊天记录' in t or '消息记录' in t): print('WINDOW:', t) '@ | python -（3s）
+
+
+第一次点击成功但还没抓到文本，我先抓一张当前QQ窗口截图确认“聊天记录”面板是否已打开，再按面板真实位置继续自动提取。
+
+已运行 @' import pyautogui, pygetwindow as gw from pathlib import Path wins=gw.getWindowsWithTitle('QQ') if not wins: raise SystemExit('NO_QQ_WINDOW') w=wins[0] img=pyautogui.screenshot(region=(w.left,w.top,w.width,w.height)) out=Path('qq_after_history_click.png') img.save(out) print(out.resolve()) print(w.left,w.top,w.width,w.height) '@ | python -（1s）
+
+
+我改用“坐标网格探测”来定位聊天记录面板可复制区域：先点红框按钮，再在右侧区域逐点尝试复制，选出包含“语文-王老师/日期”的最佳文本块并继续滚轮抓取。
+
+已运行 @' import time import pyautogui, pyperclip, pygetwindow as gw from pathlib import Path wins=gw.getWindowsWithTitle('QQ') if not wins: raise SystemExit('NO_QQ_WINDOW') win=wins[0] try: if win.isMinimized: win.restore(); time.sleep(0.2) win.activate(); time.sleep(0.4) except Exception: pass # click history button hx=win.left+int(win.width*0.935) hy=win.top+int(win.height*0.865) pyautogui.click(hx,hy) time.sleep(1.0) best_score=-1 best=None rows=[0.16,0.24,0.32,0.40,0.48,0.56,0.64,0.72,0.80] cols=[0.58,0.66,0.74,0.82,0.90,0.96] results=[] for rx in cols: for ry in rows: x=win.left+int(win.width*rx) y=win.top+int(win.height*ry) pyautogui.click(x,y) time.sleep(0.12) pyautogui.hotkey('ctrl','a') time.sleep(0.12) pyautogui.hotkey('ctrl','c') time.sleep(0.32) t=pyperclip.paste() or '' s=len(t)+t.count('\n')*20 for kw in ['语文-王老师','老师','2026/','2026-','作业','页']: if kw in t: s += 500 results.append((rx,ry,len(t),s,t[:120])) if s>best_score: best_score=s best=(rx,ry,t) Path('history_probe_results.txt').write_text('\n'.join([f"{r[0]:.2f},{r[1]:.2f} len={r[2]} score={r[3]} sample={repr(r[4])}" for r in results]),encoding='utf-8') if best: Path('history_probe_best.txt').write_text(best[2], encoding='utf-8') print('BEST',best[0],best[1],'len',len(best[2]),'score',best_score) print('HEAD',best[2][:200].encode('unicode_escape').decode('ascii')) else: print('NO_BEST') '@ | python -（51s）
+
+
+我继续做一轮“历史面板滚动采集”：在已定位到的可复制点连续滚动抓取多屏文本，专门筛查是否存在2026-03-03到2026-03-06期间“语文-王老师”的发言。
+
+正在运行命令（29s）
+$ @'
+import time,re
+import pyautogui, pyperclip, pygetwindow as gw
+from pathlib import Path
+
+wins=gw.getWindowsWithTitle('QQ')
+if not wins:
+    raise SystemExit('NO_QQ')
+win=wins[0]
+try:
+    if win.isMinimized:
+        win.restore(); time.sleep(0.2)
+    win.activate(); time.sleep(0.4)
+except Exception:
+    pass
+
+# open history button
+hx=win.left+int(win.width*0.935)
+hy=win.top+int(win.height*0.865)
+pyautogui.click(hx,hy)
+time.sleep(1)
+
+px=win.left+int(win.width*0.96)
+py=win.top+int(win.height*0.24)
+
+chunks=[]
+seen=set()
+
+def grab(tag):
+    pyautogui.click(px,py); time.sleep(0.12)
+    pyautogui.hotkey('ctrl','a'); time.sleep(0.12)
+    pyautogui.hotkey('ctrl','c'); time.sleep(0.35)
+    t=pyperclip.paste() or '"''"'
+    k=re.sub(r'\s+','"''"',t)
+    if t and k not in seen:
+        seen.add(k)
+        chunks.append((tag,t))
+    return t
+
+# baseline
+grab('base')
+# scroll up older
+for i in range(20):
+    pyautogui.scroll(900, x=px, y=py)
+    time.sleep(0.25)
+    grab(f'up_{i+1}')
+# scroll down newer
+for i in range(30):
+    pyautogui.scroll(-900, x=px, y=py)
+    time.sleep(0.25)
+    grab(f'down_{i+1}')
+
+# save raw
+out=[]
+for tag,t in chunks:
+    out.append('===== '+tag+' =====')
+    out.append(t)
+Path('history_scroll_chunks.txt').write_text('\n'.join(out), encoding='utf-8')
+print('unique_chunks',len(chunks))
+
+# find candidate lines with teacher/date/task words
+combined='\n'.join(t for _,t in chunks)
+Path('history_scroll_combined.txt').write_text(combined, encoding='utf-8')
+for m in re.finditer(r'语文-王老师[^\n]{0,200}', combined):
+    print('TEACHER_LINE', m.group(0)[:180].encode('unicode_escape').decode('ascii'))
+
+for d in ['2026/03/03','2026/03/04','2026/03/05','2026/03/06','2026-03-03','2026-03-04','2026-03-05','2026-03-06']:
+    if d in combined:
+        print('HAS_DATE', d)
+'@ | python -
+
+
+
+
+
+
+
+GPT-5.3-Codex
+
+超高
+
+
+本地
+
+完全访问权限
+
+创建 Git 存储库
+终端
+PowerShell
+

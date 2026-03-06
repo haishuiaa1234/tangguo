@@ -1,0 +1,2 @@
+WINDOW: QQ
+  descendants=8
