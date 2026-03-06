@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 try:
     import pyautogui  # type: ignore
@@ -97,7 +97,11 @@ class Task:
     eta_minutes: int
     due_priority: int
     due_hint: str
+    due_at: Optional[datetime]
     can_help: str
+
+
+TASK_ID_LEN = 10
 
 
 def normalize_sender(sender: str) -> str:
@@ -155,6 +159,23 @@ def parse_args() -> argparse.Namespace:
         "--raw-output",
         default="raw_capture.txt",
         help="保存原始抓取文本路径；留空则不保存。",
+    )
+    parser.add_argument(
+        "--complete-task",
+        action="append",
+        default=[],
+        help="将任务标记为已完成。可传任务ID前缀或任务关键字，可重复传入。",
+    )
+    parser.add_argument(
+        "--reopen-task",
+        action="append",
+        default=[],
+        help="将任务恢复为未完成。可传任务ID前缀或任务关键字，可重复传入。",
+    )
+    parser.add_argument(
+        "--force-write",
+        action="store_true",
+        help="即使聊天文本无变化也生成报告（定时任务推荐开启）。",
     )
     parser.add_argument("--once", action="store_true", help="只执行一次后退出")
     return parser.parse_args()
@@ -588,15 +609,250 @@ def estimate_minutes(task_text: str) -> int:
     return 20
 
 
-def infer_due_priority_and_hint(task_text: str) -> tuple[int, str]:
+def normalize_task_text(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"\s+", "", text)
+    text = re.sub(r"[，。！？,.!?；;：:、（）()\[\]【】\-—_]+", "", text)
+    return text
+
+
+def make_task_id(task_text: str) -> str:
+    norm = normalize_task_text(task_text)
+    return calc_hash(norm)[:TASK_ID_LEN]
+
+
+def parse_due_time_from_text(task_text: str) -> tuple[int, int]:
+    text = task_text.replace("：", ":")
+    m = re.search(r"(\d{1,2})\s*:\s*(\d{2})", text)
+    if m:
+        hh = int(m.group(1))
+        mm = int(m.group(2))
+    else:
+        m = re.search(r"(\d{1,2})\s*点\s*(半)?", text)
+        if m:
+            hh = int(m.group(1))
+            mm = 30 if m.group(2) else 0
+        else:
+            if "中午" in text:
+                return 12, 0
+            if "上午" in text or "早上" in text:
+                return 10, 0
+            if "下午" in text:
+                return 17, 0
+            if "晚上" in text or "今晚" in text:
+                return 20, 0
+            return 20, 0
+
+    if ("下午" in text or "晚上" in text) and hh < 12:
+        hh += 12
+    if "中午" in text and hh < 11:
+        hh += 12
+    hh = max(0, min(23, hh))
+    mm = max(0, min(59, mm))
+    return hh, mm
+
+
+def infer_due_datetime(task_text: str, now: datetime) -> Optional[datetime]:
+    text = task_text.strip()
+    hh, mm = parse_due_time_from_text(text)
+    base_date: Optional[date] = None
+
+    m = re.search(r"(20\d{2})[年/-](\d{1,2})[月/-](\d{1,2})日?", text)
+    if m:
+        y, mo, d = map(int, m.groups())
+        try:
+            base_date = date(y, mo, d)
+        except ValueError:
+            base_date = None
+
+    if base_date is None:
+        m = re.search(r"(\d{1,2})[./月-](\d{1,2})日?", text)
+        if m:
+            mo, d = map(int, m.groups())
+            y = now.year
+            try:
+                candidate = date(y, mo, d)
+                if candidate < (now.date() - timedelta(days=180)):
+                    candidate = date(y + 1, mo, d)
+                base_date = candidate
+            except ValueError:
+                base_date = None
+
+    if base_date is None:
+        if "今天" in text or "今晚" in text or "当天" in text:
+            base_date = now.date()
+        elif "明天" in text:
+            base_date = now.date() + timedelta(days=1)
+        elif "后天" in text:
+            base_date = now.date() + timedelta(days=2)
+
+    if base_date is None:
+        m = re.search(r"(周|星期)\s*([一二三四五六日天])", text)
+        if m:
+            wd = CH_WEEKDAY[m.group(2)]
+            delta = (wd - now.weekday()) % 7
+            base_date = now.date() + timedelta(days=delta)
+
+    if base_date is None:
+        return None
+    try:
+        return datetime(base_date.year, base_date.month, base_date.day, hh, mm, 0)
+    except ValueError:
+        return None
+
+
+def infer_due_priority_and_hint(task_text: str, now: datetime) -> tuple[int, str, Optional[datetime]]:
+    due_at = infer_due_datetime(task_text, now)
+    if due_at is not None:
+        delta_hours = (due_at - now).total_seconds() / 3600
+        if delta_hours <= 24:
+            p = 0
+        elif delta_hours <= 72:
+            p = 1
+        elif delta_hours <= 168:
+            p = 2
+        else:
+            p = 3
+        return p, due_at.strftime("%m-%d %H:%M"), due_at
+
     if any(x in task_text for x in ["今天", "今晚", "当天"]):
-        return 0, "今天"
+        return 0, "今天", None
     if "明天" in task_text:
-        return 1, "明天"
+        return 1, "明天", None
     m = re.search(r"(周[一二三四五六日天])", task_text)
     if m:
-        return 2, m.group(1)
-    return 3, "未写明"
+        return 2, m.group(1), None
+    return 3, "未写明", None
+
+
+def parse_iso_datetime(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def due_text_from_record(rec: dict) -> str:
+    due_at = parse_iso_datetime(str(rec.get("due_at", "")))
+    if due_at:
+        return due_at.strftime("%m-%d %H:%M")
+    return str(rec.get("due_hint", "未写明"))
+
+
+def upsert_task_board(tasks: list[Task], state: dict, now: datetime) -> tuple[dict[str, dict], list[dict]]:
+    board: dict[str, dict] = state.setdefault("task_board", {})
+    now_iso = now.isoformat(timespec="seconds")
+    seen_ids: set[str] = set()
+    new_task_ids: list[str] = []
+
+    for task in tasks:
+        task_id = make_task_id(task.text)
+        seen_ids.add(task_id)
+        due_at_iso = task.due_at.isoformat(timespec="seconds") if task.due_at else ""
+        rec = board.get(task_id)
+
+        if rec is None:
+            rec = {
+                "task_id": task_id,
+                "text": task.text,
+                "pages": task.pages,
+                "eta_minutes": task.eta_minutes,
+                "due_priority": task.due_priority,
+                "due_hint": task.due_hint,
+                "due_at": due_at_iso,
+                "can_help": task.can_help,
+                "source_time": task.source_time.isoformat(timespec="seconds"),
+                "first_seen": now_iso,
+                "last_seen": now_iso,
+                "status": "todo",
+                "completed_at": "",
+                "seen_count": 1,
+            }
+            board[task_id] = rec
+            new_task_ids.append(task_id)
+            continue
+
+        # Preserve completion state while refreshing task metadata.
+        rec["text"] = task.text
+        rec["pages"] = task.pages
+        rec["eta_minutes"] = task.eta_minutes
+        rec["due_priority"] = task.due_priority
+        rec["due_hint"] = task.due_hint
+        rec["due_at"] = due_at_iso
+        rec["can_help"] = task.can_help
+        rec["source_time"] = task.source_time.isoformat(timespec="seconds")
+        rec["last_seen"] = now_iso
+        rec["seen_count"] = int(rec.get("seen_count", 0)) + 1
+
+    for task_id, rec in board.items():
+        rec["seen_in_latest_window"] = task_id in seen_ids
+
+    new_tasks = [board[x] for x in new_task_ids]
+    return board, new_tasks
+
+
+def apply_manual_status_updates(
+    board: dict[str, dict],
+    complete_tokens: list[str],
+    reopen_tokens: list[str],
+    now: datetime,
+) -> list[str]:
+    updates: list[str] = []
+    now_iso = now.isoformat(timespec="seconds")
+
+    def _apply(tokens: list[str], target_status: str) -> None:
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+            matched = []
+            token_low = token.lower()
+            for rec in board.values():
+                if token_low in str(rec.get("task_id", "")).lower() or token in str(rec.get("text", "")):
+                    matched.append(rec)
+            if not matched:
+                updates.append(f"未匹配到任务：{token}")
+                continue
+            for rec in matched:
+                rec["status"] = target_status
+                rec["last_status_update"] = now_iso
+                if target_status == "done":
+                    rec["completed_at"] = now_iso
+                    updates.append(f"已完成：{rec['task_id']} {rec['text'][:28]}")
+                else:
+                    rec["completed_at"] = ""
+                    updates.append(f"已恢复未完成：{rec['task_id']} {rec['text'][:28]}")
+
+    _apply(complete_tokens, "done")
+    _apply(reopen_tokens, "todo")
+    return updates
+
+
+def sort_pending_records(records: list[dict], now: datetime) -> list[dict]:
+    def _sort_key(rec: dict) -> tuple:
+        due_at = parse_iso_datetime(str(rec.get("due_at", "")))
+        due_unknown = due_at is None
+        due_dt = due_at or datetime.max
+        return (
+            due_unknown,
+            due_dt,
+            int(rec.get("due_priority", 3)),
+            str(rec.get("first_seen", "")),
+        )
+
+    return sorted(records, key=_sort_key)
+
+
+def sort_done_records(records: list[dict]) -> list[dict]:
+    def _sort_key(rec: dict) -> tuple:
+        done_at = parse_iso_datetime(str(rec.get("completed_at", "")))
+        if done_at is None:
+            done_at = datetime.min
+        return (done_at,)
+
+    return sorted(records, key=_sort_key, reverse=True)
 
 
 def infer_help_hint(task_text: str) -> str:
@@ -624,7 +880,7 @@ def dedupe_tasks(tasks: list[Task]) -> list[Task]:
     out: list[Task] = []
     seen: set[str] = set()
     for t in tasks:
-        key = re.sub(r"\s+", "", t.text)
+        key = normalize_task_text(t.text)
         if key in seen:
             continue
         seen.add(key)
@@ -651,7 +907,7 @@ def extract_tasks(
                 continue
             pages = [m.group(0) for m in PAGE_PATTERN.finditer(segment)]
             eta = estimate_minutes(segment)
-            due_priority, due_hint = infer_due_priority_and_hint(segment)
+            due_priority, due_hint, due_at = infer_due_priority_and_hint(segment, now=now)
             tasks.append(
                 Task(
                     source_time=msg.timestamp,
@@ -660,6 +916,7 @@ def extract_tasks(
                     eta_minutes=eta,
                     due_priority=due_priority,
                     due_hint=due_hint,
+                    due_at=due_at,
                     can_help=infer_help_hint(segment),
                 )
             )
@@ -673,7 +930,17 @@ def plan_tasks(tasks: list[Task], now: datetime) -> dict[date, list[Task]]:
     remain_minutes = {d: 80 for d in days}
     plan: dict[date, list[Task]] = {d: [] for d in days}
 
-    for task in tasks:
+    ordered = sorted(
+        tasks,
+        key=lambda x: (
+            x.due_at is None,
+            x.due_at or datetime.max,
+            x.due_priority,
+            x.source_time,
+        ),
+    )
+
+    for task in ordered:
         preferred = min(task.due_priority, 2)
         day_indexes = list(range(preferred, 3)) + list(range(0, preferred))
         chosen_day = days[2]
@@ -691,8 +958,89 @@ def markdown_escape(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def record_to_task(rec: dict, now: datetime) -> Task:
+    source_time = parse_iso_datetime(str(rec.get("source_time", ""))) or now
+    due_at = parse_iso_datetime(str(rec.get("due_at", "")))
+    pages_raw = rec.get("pages", [])
+    pages = pages_raw if isinstance(pages_raw, list) else []
+    return Task(
+        source_time=source_time,
+        text=str(rec.get("text", "")).strip(),
+        pages=[str(x) for x in pages],
+        eta_minutes=int_or_default(rec.get("eta_minutes"), 20),
+        due_priority=int_or_default(rec.get("due_priority"), 3),
+        due_hint=str(rec.get("due_hint", "未写明")),
+        due_at=due_at,
+        can_help=str(rec.get("can_help", "可帮你拆解为更细执行步骤。")),
+    )
+
+
+def summarize_board(board: dict[str, dict], now: datetime) -> tuple[list[dict], list[dict]]:
+    pending: list[dict] = []
+    done: list[dict] = []
+    for rec in board.values():
+        status = str(rec.get("status", "todo")).lower()
+        if status == "done":
+            done.append(rec)
+        else:
+            pending.append(rec)
+    return sort_pending_records(pending, now=now), sort_done_records(done)
+
+
+def urgency_text(rec: dict, now: datetime) -> str:
+    due_at = parse_iso_datetime(str(rec.get("due_at", "")))
+    if due_at is None:
+        return str(rec.get("due_hint", "未写明"))
+    delta_hours = (due_at - now).total_seconds() / 3600
+    if delta_hours < 0:
+        return "已逾期"
+    if delta_hours <= 24:
+        return "24小时内"
+    if delta_hours <= 72:
+        return "3天内"
+    return "常规"
+
+
+def task_suggestion_and_example(task_text: str) -> tuple[str, str]:
+    if any(x in task_text for x in ["背诵", "朗读"]):
+        return (
+            "先听录音再分段背诵，每段限时10分钟，最后整段抽背。",
+            "示例：第一段朗读3遍 -> 盖住关键词复述 -> 家长抽背2次。",
+        )
+    if any(x in task_text for x in ["抄写", "默写", "听写"]):
+        return (
+            "先口头过一遍词义再动笔，写完立即对照课本订正。",
+            "示例：每10个词一组，写完后用红笔改错并再写1遍错词。",
+        )
+    if any(x in task_text for x in ["作文", "写话", "读后感"]):
+        return (
+            "先列提纲（开头-中间-结尾），再按提纲写初稿，最后润色。",
+            "示例：先写3点提纲，每点2句，再扩展成完整段落。",
+        )
+    if any(x in task_text for x in ["练习", "试卷", "阅读"]):
+        return (
+            "先限时独立完成，再集中订正错题并口头复述思路。",
+            "示例：20分钟做题 + 10分钟订正，错题写“错因+正确方法”。",
+        )
+    return (
+        "拆成10-15分钟的小步骤执行，先完成提交要求最明确的部分。",
+        "示例：先完成拍照需提交部分，再处理复盘和巩固部分。",
+    )
+
+
 def format_report(
-    tasks: list[Task],
+    extracted_tasks: list[Task],
+    new_tasks: list[dict],
+    pending_tasks: list[dict],
+    done_tasks: list[dict],
+    manual_updates: list[str],
     messages: list[Message],
     group_name: str,
     teacher_name: str,
@@ -706,64 +1054,114 @@ def format_report(
     lines.append(f"- 群名：{group_name}")
     lines.append(f"- 监控对象：{teacher_name}")
     lines.append(f"- 统计窗口：最近{lookback_days}天（自 {cutoff} 起）")
+    lines.append(f"- 本次识别任务：{len(extracted_tasks)} 条")
+    lines.append(f"- 本次新增任务：{len(new_tasks)} 条")
+    lines.append(f"- 当前未完成：{len(pending_tasks)} 条（已按截止时间优先）")
+    lines.append(f"- 已完成保留：{len(done_tasks)} 条")
     lines.append("")
 
-    if not tasks:
-        lines.append("## 1. 识别结果")
-        lines.append("近3天未识别到明确“需要学生完成”的语文作业消息。")
+    if manual_updates:
+        lines.append("## 0. 本次手动状态更新")
+        for item in manual_updates:
+            lines.append(f"- {item}")
         lines.append("")
-        lines.append("## 2. 建议")
-        lines.append("1. 请确认老师昵称与脚本参数 `--teacher-name` 一致。")
-        lines.append("2. 请确认抓取到的是聊天记录区而不是输入框内容。")
-        lines.append("3. 可切换到 `--chat-file` 模式读取导出的QQ群聊天记录。")
-        return "\n".join(lines)
 
-    lines.append("## 1. 识别到的待完成作业")
-    lines.append("| 序号 | 发布时间 | 作业内容 | 页码/提示 | 预计时长 |")
-    lines.append("|---|---|---|---|---|")
-    for idx, task in enumerate(tasks, start=1):
-        page_text = "、".join(task.pages) if task.pages else "-"
-        lines.append(
-            f"| {idx} | {task.source_time.strftime('%m-%d %H:%M')} | "
-            f"{markdown_escape(task.text)} | {markdown_escape(page_text)} | {task.eta_minutes} 分钟 |"
-        )
+    lines.append("## 1. 本次新增任务")
+    if not new_tasks:
+        lines.append("本次无新增任务。")
+    else:
+        lines.append("| 序号 | 任务ID | 发布时间 | 截止时间 | 作业内容 |")
+        lines.append("|---|---|---|---|---|")
+        for idx, rec in enumerate(new_tasks, start=1):
+            source_time = parse_iso_datetime(str(rec.get("source_time", "")))
+            source_text = source_time.strftime("%m-%d %H:%M") if source_time else "-"
+            lines.append(
+                f"| {idx} | `{str(rec.get('task_id', ''))[:8]}` | {source_text} | "
+                f"{due_text_from_record(rec)} | {markdown_escape(str(rec.get('text', '')))} |"
+            )
     lines.append("")
 
-    lines.append("## 2. 3天完成计划")
-    plan = plan_tasks(tasks, now)
-    for d in sorted(plan.keys()):
-        day_name = WEEKDAY_MAP[d.weekday()]
-        lines.append(f"### {d.strftime('%Y-%m-%d')}（{day_name}）")
-        if not plan[d]:
-            lines.append("- 预留机动时间：复盘错题/阅读20分钟。")
-            continue
-        for t in plan[d]:
-            lines.append(f"- [ ] {t.text}（约{t.eta_minutes}分钟，来源：{t.source_time.strftime('%m-%d %H:%M')}）")
-        total = sum(x.eta_minutes for x in plan[d])
-        lines.append(f"- 合计时长：约 {total} 分钟")
+    lines.append("## 2. 未完成任务（截止日期临近优先）")
+    if not pending_tasks:
+        lines.append("当前没有未完成任务。")
+    else:
+        lines.append("| 优先级 | 任务ID | 截止时间 | 紧急度 | 作业内容 | 页码/提示 | 预计时长 |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for idx, rec in enumerate(pending_tasks, start=1):
+            pages_raw = rec.get("pages", [])
+            pages = pages_raw if isinstance(pages_raw, list) else []
+            page_text = "、".join(str(x) for x in pages) if pages else "-"
+            lines.append(
+                f"| {idx} | `{str(rec.get('task_id', ''))[:8]}` | {due_text_from_record(rec)} | "
+                f"{urgency_text(rec, now)} | {markdown_escape(str(rec.get('text', '')))} | "
+                f"{markdown_escape(page_text)} | {int_or_default(rec.get('eta_minutes'), 20)} 分钟 |"
+            )
     lines.append("")
 
-    lines.append("## 3. 完成建议")
-    lines.append("1. 执行顺序建议：先“背诵/朗读”，再“抄写/默写”，最后做“练习册/作文”。")
-    lines.append("2. 采用25分钟专注+5分钟休息，低年级每晚总时长建议控制在60-90分钟。")
-    lines.append("3. 每项完成后立刻拍照或打卡，避免临近截止集中提交。")
-    lines.append("4. 对于“签字/订正”类任务，先完成内容再统一家长核对。")
+    lines.append("## 3. 3天完成计划")
+    if not pending_tasks:
+        lines.append("暂无待完成任务，建议每天保持20分钟语文阅读。")
+    else:
+        plan_seed = [record_to_task(rec, now) for rec in pending_tasks]
+        plan = plan_tasks(plan_seed, now)
+        for d in sorted(plan.keys()):
+            day_name = WEEKDAY_MAP[d.weekday()]
+            lines.append(f"### {d.strftime('%Y-%m-%d')}（{day_name}）")
+            if not plan[d]:
+                lines.append("- 预留机动时间：复盘错题/阅读20分钟。")
+                continue
+            for t in plan[d]:
+                lines.append(
+                    f"- [ ] {t.text}（约{t.eta_minutes}分钟，截止：{t.due_hint}，ID: `{make_task_id(t.text)[:8]}`）"
+                )
+            total = sum(x.eta_minutes for x in plan[d])
+            lines.append(f"- 合计时长：约 {total} 分钟")
     lines.append("")
 
-    lines.append("## 4. 可协助完成部分（我可以帮）")
-    help_lines = []
-    for t in tasks:
-        help_lines.append(f"- {t.text} -> {t.can_help}")
-    # Deduplicate help display.
+    lines.append("## 4. 各任务完成建议与示例")
+    if not pending_tasks:
+        lines.append("- 暂无未完成任务。")
+    else:
+        for rec in pending_tasks[:12]:
+            task_text = str(rec.get("text", "")).strip()
+            suggestion, example = task_suggestion_and_example(task_text)
+            lines.append(
+                f"- `{str(rec.get('task_id', ''))[:8]}` {task_text}；建议：{suggestion}；示例：{example}"
+            )
+    lines.append("")
+
+    lines.append("## 5. 已完成任务（保留）")
+    if not done_tasks:
+        lines.append("暂无已完成任务记录。")
+    else:
+        lines.append("| 序号 | 完成时间 | 任务ID | 作业内容 |")
+        lines.append("|---|---|---|---|")
+        for idx, rec in enumerate(done_tasks[:30], start=1):
+            done_at = parse_iso_datetime(str(rec.get("completed_at", "")))
+            done_text = done_at.strftime("%m-%d %H:%M") if done_at else "-"
+            lines.append(
+                f"| {idx} | {done_text} | `{str(rec.get('task_id', ''))[:8]}` | {markdown_escape(str(rec.get('text', '')))} |"
+            )
+    lines.append("")
+
+    lines.append("## 6. 可协助完成部分（我可以帮）")
+    help_lines: list[str] = []
+    for rec in pending_tasks:
+        text = str(rec.get("text", "")).strip()
+        can_help = str(rec.get("can_help", "")).strip() or infer_help_hint(text)
+        help_lines.append(f"- `{str(rec.get('task_id', ''))[:8]}` {text} -> {can_help}")
     seen_help: set[str] = set()
-    for hl in help_lines:
-        if hl in seen_help:
-            continue
-        seen_help.add(hl)
-        lines.append(hl)
+    if not help_lines:
+        lines.append("- 暂无待处理任务。")
+    else:
+        for item in help_lines:
+            if item in seen_help:
+                continue
+            seen_help.add(item)
+            lines.append(item)
     lines.append("")
 
-    lines.append("## 5. 老师原始消息摘录（近3天）")
+    lines.append("## 7. 老师原始消息摘录（近3天）")
     teacher_norm = normalize_sender(teacher_name)
     recent_msgs = [
         m
@@ -781,6 +1179,9 @@ def format_report(
             brief = brief[:117] + "..."
         lines.append(f"- [{m.timestamp.strftime('%m-%d %H:%M')}] {brief}")
 
+    if not recent_msgs:
+        lines.append("- 近3天未抓取到老师消息。")
+
     return "\n".join(lines)
 
 
@@ -788,23 +1189,43 @@ def process_once(
     raw_text: str,
     now: datetime,
     args: argparse.Namespace,
-) -> tuple[str, int]:
+    state: dict,
+) -> tuple[str, dict[str, int]]:
     messages = parse_chat_text(raw_text, now=now)
-    tasks = extract_tasks(
+    extracted_tasks = extract_tasks(
         messages=messages,
         teacher_name=args.teacher_name,
         lookback_days=args.lookback_days,
         now=now,
     )
+    board, new_tasks = upsert_task_board(extracted_tasks, state=state, now=now)
+    manual_updates = apply_manual_status_updates(
+        board=board,
+        complete_tokens=list(args.complete_task or []),
+        reopen_tokens=list(args.reopen_task or []),
+        now=now,
+    )
+    pending_tasks, done_tasks = summarize_board(board, now=now)
     report = format_report(
-        tasks=tasks,
+        extracted_tasks=extracted_tasks,
+        new_tasks=new_tasks,
+        pending_tasks=pending_tasks,
+        done_tasks=done_tasks,
+        manual_updates=manual_updates,
         messages=messages,
         group_name=args.group_name,
         teacher_name=args.teacher_name,
         lookback_days=args.lookback_days,
         now=now,
     )
-    return report, len(tasks)
+    stats = {
+        "extracted_count": len(extracted_tasks),
+        "new_count": len(new_tasks),
+        "pending_count": len(pending_tasks),
+        "done_count": len(done_tasks),
+        "manual_update_count": len(manual_updates),
+    }
+    return report, stats
 
 
 def read_source_text(args: argparse.Namespace) -> str:
@@ -847,18 +1268,32 @@ def main() -> int:
         try:
             raw_text = read_source_text(args)
             digest = calc_hash(raw_text)
+            has_manual_ops = bool(args.complete_task or args.reopen_task)
+            should_process = (
+                args.force_write
+                or has_manual_ops
+                or state.get("last_hash") != digest
+            )
 
-            if state.get("last_hash") == digest:
+            if not should_process:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] 无新内容，跳过生成。")
             else:
                 now = datetime.now()
-                report, task_count = process_once(raw_text=raw_text, now=now, args=args)
+                report, stats = process_once(
+                    raw_text=raw_text,
+                    now=now,
+                    args=args,
+                    state=state,
+                )
                 output_path.write_text(report, encoding="utf-8")
                 print(
-                    f"[{now.strftime('%H:%M:%S')}] 已更新报告：{output_path}，识别作业 {task_count} 条。"
+                    f"[{now.strftime('%H:%M:%S')}] 已更新报告：{output_path}；"
+                    f"识别 {stats['extracted_count']}，新增 {stats['new_count']}，"
+                    f"未完成 {stats['pending_count']}，已完成 {stats['done_count']}。"
                 )
                 state["last_hash"] = digest
                 state["last_report_at"] = now.isoformat(timespec="seconds")
+                state["last_stats"] = stats
                 save_state(state_path, state)
         except KeyboardInterrupt:
             print("\n已手动停止监控。")
