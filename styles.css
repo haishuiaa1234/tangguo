@@ -162,6 +162,60 @@ h1 {
   line-height: 1.8;
 }
 
+.latest-report {
+  margin-top: 18px;
+  background: rgba(255, 252, 246, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  animation: reveal-top 0.8s ease-out;
+}
+
+.latest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.latest-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.loaded-at {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d8cfbf;
+  background: #fbf6eb;
+  color: var(--sub-ink);
+  font-size: 12px;
+}
+
+.latest-hint {
+  margin: 10px 0 10px;
+  color: var(--sub-ink);
+  font-size: 13px;
+}
+
+.latest-report-content {
+  margin: 0 0 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px dashed #cdbda6;
+  background: #fffaf1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 12.5px;
+}
+
 .grid {
   margin-top: 18px;
   display: grid;
@@ -379,8 +433,14 @@ h1 {
   }
 
   .sprint,
+  .latest-report,
   .task-card {
     border-radius: 12px;
+  }
+
+  .latest-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .task-card {
