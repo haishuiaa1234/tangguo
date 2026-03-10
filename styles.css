@@ -314,6 +314,15 @@ h1 {
   background: #e5dac8;
 }
 
+.btn-danger {
+  background: #ba4d39;
+  border-color: #ba4d39;
+}
+
+.btn-danger:hover {
+  background: #9b3d2d;
+}
+
 .filter-wrap {
   display: inline-flex;
   align-items: center;
@@ -474,4 +483,3 @@ input[type="date"] {
     padding: 5px 9px;
   }
 }
-
