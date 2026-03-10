@@ -11,53 +11,45 @@
     <header class="hero">
       <p class="badge">琅小柳洲东路一2班 · 语文-王老师</p>
       <h1>家长待办任务网站</h1>
-      <p class="subtitle">自动读取最新监控报告，并结构化为可跟进任务。</p>
+      <p class="subtitle">自动读取最新监控报告，并以原版卡片风格跟进任务。</p>
+
+      <section class="progress-panel">
+        <div class="progress-head">
+          <strong>当前任务进度</strong>
+          <span id="progressText">0 / 0</span>
+        </div>
+        <div class="progress-track">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div class="progress-foot">
+          <span id="progressPercent">0%</span>
+          <div class="quick-actions">
+            <label class="filter-wrap">
+              <span>筛选</span>
+              <select id="taskFilter" class="select-control">
+                <option value="all">全部</option>
+                <option value="todo">待办</option>
+                <option value="doing">进行中</option>
+                <option value="done">已完成</option>
+              </select>
+            </label>
+            <button id="copyFollowupBtn" class="btn btn-plain" type="button">复制跟进清单</button>
+            <button id="resetBtn" class="btn btn-plain" type="button">重置状态</button>
+          </div>
+        </div>
+      </section>
     </header>
 
-    <section class="panel summary">
-      <div class="summary-head">
-        <h2>任务总览</h2>
-        <span id="reportTime" class="loaded-at">报告时间：--</span>
-      </div>
-      <div class="metrics">
-        <article class="metric-card">
-          <p class="metric-label">未完成任务</p>
-          <p id="metricPending" class="metric-value">0</p>
-        </article>
-        <article class="metric-card">
-          <p class="metric-label">我已完成</p>
-          <p id="metricDone" class="metric-value">0</p>
-        </article>
-        <article class="metric-card">
-          <p class="metric-label">进行中</p>
-          <p id="metricDoing" class="metric-value">0</p>
-        </article>
-        <article class="metric-card">
-          <p class="metric-label">临期/逾期</p>
-          <p id="metricUrgent" class="metric-value">0</p>
-        </article>
-      </div>
+    <section class="sprint">
+      <h2>优先执行顺序</h2>
+      <ol id="priorityList">
+        <li>正在分析最新任务...</li>
+      </ol>
+      <p id="reportTimeLine" class="subtitle">报告时间：--</p>
     </section>
 
-    <section class="panel board">
-      <div class="board-head">
-        <h2>任务看板（可跟进）</h2>
-        <div class="board-actions">
-          <label class="filter-wrap">
-            <span>筛选</span>
-            <select id="taskFilter" class="select-control">
-              <option value="all">全部</option>
-              <option value="todo">待办</option>
-              <option value="doing">进行中</option>
-              <option value="done">已完成</option>
-            </select>
-          </label>
-          <button id="copyFollowupBtn" class="btn" type="button">复制跟进清单</button>
-        </div>
-      </div>
-      <div id="taskList" class="task-list">
-        <p class="placeholder">正在解析任务...</p>
-      </div>
+    <section id="taskList" class="grid">
+      <p class="placeholder">正在解析任务...</p>
     </section>
 
     <section class="latest-report">
