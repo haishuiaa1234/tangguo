@@ -12,6 +12,7 @@ import json
 import re
 import sys
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -75,6 +76,31 @@ NON_HOMEWORK_PATTERNS = [
     r"^辛苦[了]?$",
     r"^已完成$",
     r"^打卡$",
+    r"^各位家长[:：]?",
+    r"^各位家长好",
+    r"^上课坐姿端正[:：]",
+    r"^积极举手回答[:：]",
+    r"^让我们共同守护",
+]
+
+TECH_NOISE_HINTS = [
+    "Set-Location",
+    "Select-String",
+    "Get-Content",
+    "Get-ChildItem",
+    "Invoke-",
+    "Format-Table",
+    "git ",
+    "python ",
+    "py_compile",
+    "Create PR",
+    "OpenClaw",
+    "D:\\",
+    "C:\\",
+    ".ps1",
+    ".py",
+    ".md",
+    "| Select-Object",
 ]
 
 PAGE_PATTERN = re.compile(
@@ -177,6 +203,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="即使聊天文本无变化也生成报告（定时任务推荐开启）。",
     )
+    parser.add_argument(
+        "--deleted-task-ids-file",
+        default="tangguo/deleted_task_ids.json",
+        help="已删除任务ID文件路径（JSON）。",
+    )
+    parser.add_argument(
+        "--deleted-task-ids-url",
+        default="https://raw.githubusercontent.com/haishuiaa1234/tangguo/main/deleted_task_ids.json",
+        help="已删除任务ID远程JSON地址（可为空）。",
+    )
     parser.add_argument("--once", action="store_true", help="只执行一次后退出")
     return parser.parse_args()
 
@@ -204,11 +240,31 @@ def resolve_qq_window(group_name: str):
             "缺少依赖：请先运行 `pip install -r requirements.txt` 安装 pyautogui/pyperclip/PyGetWindow。"
         )
 
-    titles = [t for t in gw.getAllTitles() if t and group_name in t]
+    # Always try group search in QQ main window first, to align with
+    # "left-top search box -> input group name -> switch group" workflow.
+    try:
+        try_open_group_chat_from_main_qq(group_name)
+        time.sleep(0.8)
+    except Exception:
+        pass
+
+    def _qq_group_titles() -> list[str]:
+        out: list[str] = []
+        for title in gw.getAllTitles():
+            if not title or group_name not in title:
+                continue
+            upper = title.upper()
+            # Avoid accidentally matching non-QQ windows that contain the group name.
+            if "QQ" not in upper and "腾讯QQ" not in title:
+                continue
+            out.append(title)
+        return out
+
+    titles = _qq_group_titles()
     if not titles:
         try_open_group_chat_from_main_qq(group_name)
         time.sleep(1.2)
-        titles = [t for t in gw.getAllTitles() if t and group_name in t]
+        titles = _qq_group_titles()
     if titles:
         windows = gw.getWindowsWithTitle(titles[0])
         if not windows:
@@ -241,6 +297,11 @@ def capture_chat_text_from_qq(group_name: str) -> str:
 
     if not text.strip():
         raise RuntimeError("复制到的聊天内容为空，请确认聊天窗口中有记录。")
+    if not looks_like_chat_capture(text):
+        raise RuntimeError(
+            "复制到的内容不像聊天记录（可能复制到了输入框或旧剪贴板内容）。"
+            "请先点中聊天消息区后重试，或改用 --use-scroll-capture。"
+        )
     return text
 
 
@@ -382,13 +443,19 @@ def copy_text_at_pixel(x: int, y: int) -> str:
     assert pyautogui is not None
     assert pyperclip is not None
 
+    sentinel = f"__qq_monitor_clip_{time.time_ns()}__"
+    pyperclip.copy(sentinel)
+    time.sleep(0.05)
     pyautogui.click(x, y)
     time.sleep(0.15)
     pyautogui.hotkey("ctrl", "a")
     time.sleep(0.15)
     pyautogui.hotkey("ctrl", "c")
     time.sleep(0.35)
-    return pyperclip.paste() or ""
+    copied = pyperclip.paste() or ""
+    if copied == sentinel:
+        return ""
+    return copied
 
 
 def choose_best_chat_point(win, teacher_name_hint: str) -> tuple[int, int, str]:
@@ -428,6 +495,8 @@ def merge_text_chunks(chunks: list[str]) -> str:
 def score_captured_text(text: str, teacher_name_hint: str = "") -> int:
     if not text:
         return 0
+    if not looks_like_chat_capture(text):
+        return -1000
     score = len(text)
     score += text.count("\n") * 20
     if any(ch in text for ch in ["作业", "老师", "群", "家长", "今天", "明天"]):
@@ -435,6 +504,22 @@ def score_captured_text(text: str, teacher_name_hint: str = "") -> int:
     if teacher_name_hint and teacher_name_hint in text:
         score += 500
     return score
+
+
+def looks_like_chat_capture(text: str) -> bool:
+    t = (text or "").strip()
+    if len(t) < 20:
+        return False
+    lines = [x for x in t.splitlines() if x.strip()]
+    if len(lines) < 2:
+        return False
+    if re.search(r"\d{1,2}:\d{2}", t):
+        return True
+    if re.search(r"\d{4}[年/-]\d{1,2}[月/-]\d{1,2}", t):
+        return True
+    if "语文-王老师" in t or "王老师" in t:
+        return True
+    return False
 
 
 def parse_date_token(token: str) -> Optional[date]:
@@ -571,6 +656,64 @@ def parse_chat_text(raw_text: str, now: datetime) -> list[Message]:
     return valid
 
 
+def infer_date_from_inline_text(line: str, now: datetime, fallback: date) -> date:
+    line = line.strip()
+    m = re.search(r"(20\d{2})[./年-](\d{1,2})[./月-](\d{1,2})日?", line)
+    if m:
+        y, mo, d = map(int, m.groups())
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            return fallback
+
+    m = re.search(r"(?<!\d)(\d{1,2})[./月](\d{1,2})(?:日)?(?!\d)", line)
+    if m:
+        mo, d = map(int, m.groups())
+        y = now.year
+        try:
+            candidate = date(y, mo, d)
+            # Handle year crossover around new year.
+            if candidate > now.date() + timedelta(days=45):
+                candidate = date(y - 1, mo, d)
+            elif candidate < now.date() - timedelta(days=320):
+                candidate = date(y + 1, mo, d)
+            return candidate
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def parse_plain_capture_text(raw_text: str, now: datetime, teacher_name: str) -> list[Message]:
+    lines = raw_text.splitlines()
+    current_date = now.date()
+    blocks: list[Message] = []
+    buf: list[str] = []
+
+    def _flush() -> None:
+        if not buf:
+            return
+        content = "\n".join([x for x in buf if x.strip()]).strip()
+        buf.clear()
+        if not content:
+            return
+        ts = datetime(current_date.year, current_date.month, current_date.day, 20, 0, 0)
+        blocks.append(Message(timestamp=ts, sender=teacher_name, content=content))
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            _flush()
+            continue
+        inferred_date = infer_date_from_inline_text(line, now=now, fallback=current_date)
+        if inferred_date != current_date:
+            _flush()
+            current_date = inferred_date
+        buf.append(line)
+
+    _flush()
+    return blocks
+
+
 def contains_non_homework_only(text: str) -> bool:
     pure = re.sub(r"[，。！？,.!?\s]+", "", text)
     if not pure:
@@ -584,6 +727,8 @@ def is_homework_text(text: str) -> bool:
         return False
     if contains_non_homework_only(normalized):
         return False
+    if looks_like_technical_noise(normalized):
+        return False
 
     keyword_hits = sum(1 for kw in HOMEWORK_KEYWORDS if kw in normalized)
     if keyword_hits >= 2:
@@ -591,8 +736,26 @@ def is_homework_text(text: str) -> bool:
     if keyword_hits == 1 and len(normalized) >= 8:
         return True
 
-    imperative_hints = ["请", "务必", "今晚", "明天交", "完成后", "家长", "签字"]
+    imperative_hints = ["请完成", "请提交", "务必", "今晚", "明天交", "完成后", "家长签字", "打卡", "回执", "带打印"]
     return any(x in normalized for x in imperative_hints)
+
+
+def looks_like_technical_noise(text: str) -> bool:
+    s = text.strip()
+    if not s:
+        return False
+    if s.startswith("http://") or s.startswith("https://"):
+        return True
+    if any(x in s for x in TECH_NOISE_HINTS):
+        return True
+
+    # Heuristic: command/log style lines often include many ASCII symbols.
+    ascii_symbol_count = sum(
+        1 for ch in s if ch in "\\|/@{}[]<>_=+-*`$;"
+    )
+    if ascii_symbol_count >= 4 and re.search(r"[A-Za-z]", s):
+        return True
+    return False
 
 
 def estimate_minutes(task_text: str) -> int:
@@ -666,7 +829,7 @@ def infer_due_datetime(task_text: str, now: datetime) -> Optional[datetime]:
             base_date = None
 
     if base_date is None:
-        m = re.search(r"(\d{1,2})[./月-](\d{1,2})日?", text)
+        m = re.search(r"(\d{1,2})[./月](\d{1,2})日?", text)
         if m:
             mo, d = map(int, m.groups())
             y = now.year
@@ -853,6 +1016,78 @@ def sort_done_records(records: list[dict]) -> list[dict]:
         return (done_at,)
 
     return sorted(records, key=_sort_key, reverse=True)
+
+
+def cleanse_task_board(board: dict[str, dict]) -> int:
+    remove_ids: list[str] = []
+    for task_id, rec in board.items():
+        text = str(rec.get("text", "")).strip()
+        if not text:
+            remove_ids.append(task_id)
+            continue
+        if looks_like_technical_noise(text):
+            remove_ids.append(task_id)
+            continue
+
+    for task_id in remove_ids:
+        board.pop(task_id, None)
+    return len(remove_ids)
+
+
+def parse_deleted_task_ids_payload(payload: Any) -> set[str]:
+    ids: set[str] = set()
+    if isinstance(payload, list):
+        for x in payload:
+            if isinstance(x, str) and x.strip():
+                ids.add(x.strip())
+        return ids
+
+    if isinstance(payload, dict):
+        if isinstance(payload.get("ids"), dict):
+            for key in payload["ids"].keys():
+                if isinstance(key, str) and key.strip():
+                    ids.add(key.strip())
+        elif isinstance(payload.get("ids"), list):
+            for x in payload["ids"]:
+                if isinstance(x, str) and x.strip():
+                    ids.add(x.strip())
+        else:
+            # fallback: dict keys themselves are task ids
+            for key in payload.keys():
+                if isinstance(key, str) and re.fullmatch(r"[0-9a-f]{8,40}", key.strip(), flags=re.IGNORECASE):
+                    ids.add(key.strip())
+    return ids
+
+
+def load_deleted_task_ids(path: Path, url: str) -> set[str]:
+    ids: set[str] = set()
+
+    if url.strip():
+        try:
+            with urllib.request.urlopen(url.strip(), timeout=8) as resp:
+                text = resp.read().decode("utf-8", errors="ignore")
+            payload = json.loads(text)
+            ids |= parse_deleted_task_ids_payload(payload)
+        except Exception:
+            pass
+
+    if path.exists():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            ids |= parse_deleted_task_ids_payload(payload)
+        except Exception:
+            pass
+
+    return ids
+
+
+def remove_deleted_ids_from_board(board: dict[str, dict], deleted_ids: set[str]) -> int:
+    if not deleted_ids:
+        return 0
+    to_remove = [task_id for task_id in board.keys() if task_id in deleted_ids]
+    for task_id in to_remove:
+        board.pop(task_id, None)
+    return len(to_remove)
 
 
 def infer_help_hint(task_text: str) -> str:
@@ -1198,7 +1433,29 @@ def process_once(
         lookback_days=args.lookback_days,
         now=now,
     )
+    if not extracted_tasks:
+        plain_messages = parse_plain_capture_text(
+            raw_text=raw_text,
+            now=now,
+            teacher_name=args.teacher_name,
+        )
+        plain_tasks = extract_tasks(
+            messages=plain_messages,
+            teacher_name=args.teacher_name,
+            lookback_days=args.lookback_days,
+            now=now,
+        )
+        if plain_tasks:
+            messages = plain_messages
+            extracted_tasks = plain_tasks
+
     board, new_tasks = upsert_task_board(extracted_tasks, state=state, now=now)
+    removed_noise_count = cleanse_task_board(board)
+    deleted_ids = load_deleted_task_ids(
+        path=Path(args.deleted_task_ids_file).expanduser().resolve(),
+        url=str(args.deleted_task_ids_url or ""),
+    )
+    removed_deleted_count = remove_deleted_ids_from_board(board, deleted_ids)
     manual_updates = apply_manual_status_updates(
         board=board,
         complete_tokens=list(args.complete_task or []),
@@ -1224,6 +1481,8 @@ def process_once(
         "pending_count": len(pending_tasks),
         "done_count": len(done_tasks),
         "manual_update_count": len(manual_updates),
+        "removed_noise_count": removed_noise_count,
+        "removed_deleted_count": removed_deleted_count,
     }
     return report, stats
 
@@ -1242,7 +1501,15 @@ def read_source_text(args: argparse.Namespace) -> str:
             scroll_amount=args.scroll_amount,
         )
     else:
-        raw = capture_chat_text_from_qq(args.group_name)
+        try:
+            raw = capture_chat_text_from_qq(args.group_name)
+        except Exception:
+            raw = capture_chat_text_from_qq_by_scroll(
+                group_name=args.group_name,
+                teacher_name=args.teacher_name,
+                scroll_rounds=args.scroll_rounds,
+                scroll_amount=args.scroll_amount,
+            )
 
     if args.raw_output:
         Path(args.raw_output).expanduser().resolve().write_text(raw, encoding="utf-8")
@@ -1289,7 +1556,9 @@ def main() -> int:
                 print(
                     f"[{now.strftime('%H:%M:%S')}] 已更新报告：{output_path}；"
                     f"识别 {stats['extracted_count']}，新增 {stats['new_count']}，"
-                    f"未完成 {stats['pending_count']}，已完成 {stats['done_count']}。"
+                    f"未完成 {stats['pending_count']}，已完成 {stats['done_count']}，"
+                    f"清理噪音 {stats['removed_noise_count']}，"
+                    f"删除过滤 {stats['removed_deleted_count']}。"
                 )
                 state["last_hash"] = digest
                 state["last_report_at"] = now.isoformat(timespec="seconds")
