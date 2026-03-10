@@ -1,15 +1,13 @@
 :root {
-  --bg-cream: #f6f0e2;
-  --bg-mint: #d8ebe4;
-  --bg-warm: #f0dcc8;
-  --ink: #30271d;
-  --sub-ink: #5f5347;
-  --line: #d8cdbc;
-  --card: #fffdf8;
-  --high: #a63f26;
-  --mid: #8f5c00;
-  --btn: #2f6f5e;
-  --btn-hover: #245447;
+  --bg-cream: #f5f2ec;
+  --ink: #2f2b24;
+  --sub-ink: #5f574a;
+  --line: #d7c8b5;
+  --card: #f6f2eb;
+  --high: #b75a43;
+  --mid: #9a6a12;
+  --btn: #2f7a66;
+  --btn-hover: #256152;
 }
 
 * {
@@ -21,19 +19,13 @@ body {
   margin: 0;
   color: var(--ink);
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(240, 220, 200, 0.72), transparent 40%),
-    radial-gradient(circle at 88% 20%, rgba(216, 235, 228, 0.8), transparent 34%),
-    linear-gradient(145deg, var(--bg-cream), #f7f3ea 45%, #ecf3f0);
+  background: var(--bg-cream);
   min-height: 100vh;
   overflow-x: hidden;
 }
 
 .bg-shape {
-  position: fixed;
-  z-index: -1;
-  filter: blur(1px);
-  opacity: 0.48;
+  display: none;
 }
 
 .bg-shape-a {
@@ -56,15 +48,15 @@ body {
 
 .page {
   width: min(1140px, 94vw);
-  margin: 26px auto 40px;
+  margin: 18px auto 32px;
 }
 
 .hero {
-  background: linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(255, 253, 248, 0.88));
+  background: #f7f3ec;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 16px;
   padding: 24px 24px 20px;
-  box-shadow: 0 20px 34px -28px rgba(53, 42, 30, 0.5);
+  box-shadow: 0 6px 16px -12px rgba(53, 42, 30, 0.35);
   animation: reveal-top 0.7s ease-out;
 }
 
@@ -73,9 +65,9 @@ body {
   margin: 0 0 8px;
   padding: 6px 11px;
   border-radius: 999px;
-  border: 1px solid #d6c6ac;
+  border: 1px solid #d8cab6;
   font-size: 13px;
-  background: rgba(245, 236, 221, 0.78);
+  background: #f0e8dd;
 }
 
 h1,
@@ -97,8 +89,8 @@ h1 {
 }
 
 .progress-panel {
-  border: 1px solid #d8cfbf;
-  background: linear-gradient(180deg, #fffaf0, #fbf6eb);
+  border: 1px solid #dccfbe;
+  background: #f6efe4;
   border-radius: 16px;
   padding: 14px;
 }
@@ -125,14 +117,14 @@ h1 {
   margin: 10px 0;
   height: 10px;
   border-radius: 999px;
-  background: #eadfcd;
+  background: #e9dece;
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, #2f6f5e, #6aa891);
+  background: linear-gradient(90deg, #2f7a66, #5fa38e);
   transition: width 0.35s ease;
 }
 
@@ -144,7 +136,7 @@ h1 {
 
 .sprint {
   margin-top: 18px;
-  background: rgba(255, 252, 246, 0.92);
+  background: #f7f3ec;
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 16px 18px;
@@ -164,7 +156,7 @@ h1 {
 
 .latest-report {
   margin-top: 18px;
-  background: rgba(255, 252, 246, 0.92);
+  background: #f7f3ec;
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 16px 18px;
@@ -189,8 +181,8 @@ h1 {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid #d8cfbf;
-  background: #fbf6eb;
+  border: 1px solid #d8cab9;
+  background: #efe7db;
   color: var(--sub-ink);
   font-size: 12px;
 }
@@ -206,9 +198,9 @@ h1 {
   max-height: 420px;
   overflow: auto;
   padding: 10px;
-  border-radius: 12px;
-  border: 1px dashed #cdbda6;
-  background: #fffaf1;
+  border-radius: 10px;
+  border: 1px dashed #ccbca5;
+  background: #f3eee4;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
@@ -220,7 +212,7 @@ h1 {
   margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .task-card {
@@ -228,7 +220,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 14px 14px 12px;
-  box-shadow: 0 12px 20px -18px rgba(43, 34, 26, 0.55);
+  box-shadow: 0 4px 12px -10px rgba(43, 34, 26, 0.55);
   opacity: 0;
   transform: translateY(18px);
   animation: reveal-card 0.55s ease forwards;
@@ -274,14 +266,14 @@ h1 {
 
 .due-high {
   color: var(--high);
-  background: #fff0ed;
-  border-color: #f2c4ba;
+  background: #f8ebe7;
+  border-color: #e9b8ab;
 }
 
 .due-mid {
   color: var(--mid);
-  background: #fff8e7;
-  border-color: #ebd9aa;
+  background: #f8f2e4;
+  border-color: #dfcc9f;
 }
 
 .task-desc {
@@ -306,9 +298,9 @@ h1 {
 .sample {
   margin: 8px 0;
   padding: 9px 10px;
-  border: 1px dashed #cdbda6;
+  border: 1px dashed #ccbca5;
   border-radius: 10px;
-  background: #fffaf1;
+  background: #f3eee4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -345,13 +337,13 @@ h1 {
 }
 
 .btn-plain {
-  background: #fbf5ea;
-  border-color: #dbcbb0;
+  background: #ece4d7;
+  border-color: #cdbca0;
   color: #5f513f;
 }
 
 .btn-plain:hover {
-  background: #f4ead8;
+  background: #e5dac8;
 }
 
 .toast {
